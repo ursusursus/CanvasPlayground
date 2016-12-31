@@ -20,12 +20,26 @@ import android.view.animation.OvershootInterpolator;
  */
 
 public class ElasticView extends View {
-    private static final int MESH_WIDTH = 30;
+    /**
+     * Tu je ten trik, kedze mam grid cell je na sirku len 1,
+     * tak potom mozem pouzit dve krivky oproti sebe v rovnakom smere (obe vertikalne),
+     * a pixely medzi budu dopocitane normalne linearne,
+     * ak by bolo viacej na sirku, tak by som musel hybat vrcholmi v strede nejako
+     * a to by uz bolo zlozitejsie.
+     *
+     * Z toho vyplyva ze takto nepojde moc robit taky strecovaci efekt ktory bude
+     * mat krivky jednu vertikalne druhu zvislo. Resp mozem ale musim manualne posuvat
+     * vsetky krivky ktore mi vzniknu ako ciary v tom gride, resp ich kontrolne body
+     * a to uz je komplikejtid
+     *
+     */
+    private static final int MESH_WIDTH = 1;
     private static final int MESH_HEIGHT = 30;
     private static final int MESH_SIZE = (MESH_WIDTH + 1) * (MESH_HEIGHT + 1);
     public static final float MAX_STRETCH = 300f;
     private Bitmap mBitmap;
-    private Path mPath = new Path();
+    private Path mLeftPath = new Path();
+    private Path mRightPath = new Path();
     private Paint mDebugPaint;
     private float[] mStaticVertices = new float[MESH_SIZE * 2];
     private float[] mDrawVertices = new float[MESH_SIZE * 2];
@@ -93,17 +107,26 @@ public class ElasticView extends View {
 
     private void createPath() {
         int bitmapHeight = mBitmap.getHeight();
+        int bitmapWidth = mBitmap.getWidth();
         float stretchSize = 0.25F * bitmapHeight * mProgress;
 
-        mPath.reset();
-        mPath.moveTo(0, 0);
-        mPath.quadTo(
+        mLeftPath.reset();
+        mLeftPath.moveTo(0, 0);
+        mLeftPath.quadTo(
                 stretchSize, bitmapHeight,
                 0, bitmapHeight + stretchSize);
+
+        mRightPath.reset();
+        mRightPath.moveTo(bitmapWidth, 0);
+        mRightPath.quadTo(
+                bitmapWidth - stretchSize, bitmapHeight,
+                bitmapWidth, bitmapHeight + stretchSize);
     }
 
     private void matchVerts() {
-        PathMeasure pm = new PathMeasure(mPath, false);
+        PathMeasure pmLeft = new PathMeasure(mLeftPath, false);
+        PathMeasure pmRight = new PathMeasure(mRightPath, false);
+
         float[] coords = new float[2];
         float bitmapHeight = mBitmap.getHeight();
 
@@ -112,8 +135,15 @@ public class ElasticView extends View {
             float y = mStaticVertices[i * 2 + 1];
             float yIndexFraction = y / bitmapHeight;
 
+            // Viem ze mam len jeden slice na sirku,
+            // teda pomozem si ze ak vrchol ma x = 0
+            // tak viem ze sa ma posuvat podla lavej krivky
+            // else pravej
+            PathMeasure pm = (x == 0f) ? pmLeft : pmRight;
             pm.getPosTan(yIndexFraction * pm.getLength(), coords, null);
-            setXY(mDrawVertices, i, x + coords[0], coords[1]);
+
+            // setXY(mDrawVertices, i, x + coords[0], coords[1]);
+            setXY(mDrawVertices, i, coords[0], coords[1]);
         }
     }
 
@@ -168,6 +198,7 @@ public class ElasticView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         canvas.drawBitmapMesh(mBitmap, MESH_WIDTH, MESH_HEIGHT, mDrawVertices, 0, null, 0, null);
-        canvas.drawPath(mPath, mDebugPaint);
+        canvas.drawPath(mLeftPath, mDebugPaint);
+        canvas.drawPath(mRightPath, mDebugPaint);
     }
 }
